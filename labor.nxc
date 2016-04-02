@@ -4,7 +4,7 @@
 #define ultrahang IN_3
 #define motorbal OUT_A
 #define motorjobb OUT_C
-
+//Teszt: most szabadon írhatok, mert ez az én részem
 //OnFwd(motorjobb,seb1);
 //OnRev(motorbal,seb1);
 

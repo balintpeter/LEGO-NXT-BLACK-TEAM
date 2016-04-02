@@ -162,7 +162,7 @@ task vanevonal(){
      if(szin==szin_amit_kovet || szin==szin_amit_kovetk)
            labirintus=0;    //PETI: Ha szalagra érünk, akkor kiértünk a labirintusból.
 }
-
+//Ide kommenteltem
 task main(){
     SetSensorColorFull(szinszenzor);
     SetSensorUltrasonic(ultrahang);        //Peti: ultrahang szenzor bevezetése

@@ -1,0 +1,171 @@
+#define motor OUT_AC
+#define szinszenzor IN_1
+#define nyomogomb IN_2
+#define ultrahang IN_3
+#define motorbal OUT_A
+#define motorjobb OUT_C
+
+//globális változók
+//-----------------
+int labirintus=1; //Peti: labirintusban vagyunk-e
+int ultrakrit=50;
+int sebtolat=20;
+int fordulasido=400;
+int falelol=0;
+int ut=6; // összesen mért út
+int kerek_R=22; // kerék sugara mm-ben
+int mer=0; // mér parancs ha mérnie kell az utat
+int szin;
+int szem;
+int gombnyomas;
+int szin_amit_kovet=1;
+int szin_amit_kovetk=4;
+int perges=20;
+int seb1=40; // előre a mototrok sebessége
+int seb2=60; // a forgas sebessege
+int vonalon;
+int szog=0; // vonalon vagyunk-e
+//-----------------
+task ultrahangerzekelo(){
+     while(1){
+         szem=Sensor(ultrahang);  //Peti: folyamatosan kidobja közösbe az ultrahang értékét
+         TextOut(0,LCD_LINE2,"Ultra: " ,false);
+         NumOut(8,LCD_LINE2,szem,false);
+     }
+}
+
+task szinerzekelo(){
+     while(1){
+         szin=Sensor(szinszenzor); //Bazsi: folyamatosan kidobja közösbe az aktuális színértéket
+         TextOut(0,LCD_LINE2,"Szin: " ,false);
+         NumOut(8,LCD_LINE2,MotorTachoCount(motorjobb),false);
+     }
+}
+
+task nyomogomberzekelo(){
+     int gomb;
+     while(1) {
+         gomb=Sensor(nyomogomb);
+         if (gomb==1) {
+             gombnyomas=1;
+             falelol=1;   // labirintushoz
+         }
+         until (gombnyomas==0); //Bazsi: vár amíg valaki le nem nullázza a gombnyomást
+     }
+}
+
+task vonal_keres(){
+     int kanyar=1;
+     int ford;       //Bazsi: maximális elfordulás egy irányba
+     int elford;     //Bazsi: aktuális elfordulás
+     while(1){
+          until(vonalon==0);  //Bazsi: vár amig a vonalon vagyunk
+          ford=0;
+          elford=0;
+          while (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){
+               ford+=100;
+               if (kanyar==1){
+                  OnFwd(motorbal,seb2);
+                  OnRev(motorjobb,seb2);
+               }
+               else if(kanyar==-1){
+                  OnFwd(motorjobb,seb2);
+                  OnRev(motorbal,seb2);
+               }
+               Wait(elford);
+               while ((szin!=szin_amit_kovet && szin!=szin_amit_kovetk) && elford!=ford) {
+                  Wait(5);
+                  elford+=5;
+               }
+               if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk) kanyar*=-1;
+          }
+          Wait(perges);
+          if (szin==szin_amit_kovet || szin==szin_amit_kovetk){
+             vonalon=1;
+             Off(motor);
+          }
+     }
+}
+
+task egyenes(){
+     vonalon=1;  //Bazsi: tfh a vonalon kezdünk
+     while(1){
+         mer=1;
+         OnFwdSync(motor,seb1,0);
+         if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){    //Bazsi: ha nem talalja a szint , es nem pereg,
+             Wait(perges);                                        //Bazsi: atadja az iranyitast a vonal keresonek
+             if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){
+             }
+                vonalon=0;
+                mer=0;
+                Off(motor);
+         }
+         until(vonalon==1);
+     }
+}
+
+task fordulas(){
+     while(1){
+
+              szog=MotorRotationCount(motorjobb);
+              NumOut(0,LCD_LINE4,ut,false);
+              }
+}
+
+task meres(){
+     while (1){
+        until(vonalon==1);                   //Bazsi: vár amig nem jön vonalon=1
+           ResetRotationCount(motorjobb);
+           szog=0;                           //Bazsi: törli a kerékelfordulást
+           while(vonalon==1){}               //Bazsi: amíg vonalon == 1 vár
+           szog=MotorRotationCount(motorjobb);
+           NumOut(0,LCD_LINE5,szog,false);
+           ut=ut+(szog/360)*2*PI*kerek_R;    //ha mer!=1 hozzáadja az úthoz a reset utáni elfordulást
+           NumOut(0,LCD_LINE3,ut,false);     //csak akkor változik amikor lemegyünk az útról
+     }
+     
+}
+
+task lab(){                       //Peti: addig él ez a task, ameddig a
+     until(labirintus==1);        //labirintusban vagyunk, tehát vonalat nem találtunk.
+     while(szem<=ultrakrit && falelol==0){//ha nincs balrakanyar vagy gombnyomás, megyünk előre
+           OnFwdSync(motor,seb1,0);
+     }
+     if (falelol==1){//balra semmi, fal elől.
+        OnRevSync(motor,sebtolat,0);   //Peti: visszatolatunk picit.
+        Wait(200);     //TESZTELNI KELL!!!!!!!!!!!
+        Off(motor);
+        if(szem<=ultrakrit){
+           OnFwdSync(motor,seb2,-100);
+           Wait(fordulasido);//FORDULASIDOT LE KELL MÉRNI!! 90 FOKOT KELLENE FORDULNI ENNYI IDŐ ALATT
+           Off(motor);
+           falelol=0;
+        }
+        else  if (szem>ultrakrit){ //balra lyuk, elől nincs fal.
+                 OnFwdSync(motor,seb2,100);
+                 Wait(fordulasido);
+                 while(szem>ultrakrit)
+                 OnFwdSync(motor,seb1,0);
+        }
+     }
+     if (szem>ultrakrit){ //balra lyuk, elől nincs fal.
+           OnFwdSync(motor,seb2,100);
+           Wait(fordulasido);
+           while(szem>ultrakrit)
+              OnFwdSync(motor,seb1,0);
+     }
+
+
+}
+
+task vanevonal(){
+     if(szin==szin_amit_kovet || szin==szin_amit_kovetk)
+           labirintus=0;    //PETI: Ha szalagra érünk, akkor kiértünk a labirintusból.
+}
+
+task main(){
+    SetSensorColorFull(szinszenzor);
+    SetSensorUltrasonic(ultrahang);        //Peti: ultrahang szenzor bevezetése
+    
+    Precedes(meres,egyenes,vonal_keres,szinerzekelo,fordulas,nyomogomberzekelo);
+}

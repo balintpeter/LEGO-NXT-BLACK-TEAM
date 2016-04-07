@@ -1,0 +1,634 @@
+#define motor OUT_AC
+#define szinszenzor IN_1
+#define nyomogomb IN_2
+#define ultrahang IN_3
+#define motorbal OUT_A
+#define motorjobb OUT_C
+
+//******************************************************//
+
+             //-------GLOBALIS VALTOZOK----// (a legtöbb afölé a task fölé van írva amelyikben használjuk
+
+//******************************************************//
+
+int perges=10;                      //pergés értéke
+int szin_amit_kovet=1;
+int szin_amit_kovetk=4;
+int hanyszor_valtott_szint=0;
+int vonalon=1;
+int hanyat_fordult=0;                          //megadja a falkerülős feladathoz mennyit fordultunk
+int feladat=0;  //aktuális feladat kódja: 0:labirintus
+                //                        1: vonal_talal
+                //                        2: meres
+                //                        3: vonalkovetes
+                //                        4: falkerules
+                //                        5: vonal_talal
+                //                        6: vonalkovetes és parkolas
+                //                        7:egy ures task, hogy még véletlenül se futhasson másik task
+                // a feladat változó határozza meg hogy melyik precedes fut, melyik feladatot csináljuk
+
+//********************************************************//
+
+          //---------ERZEKELOK--------------//
+          
+//*******************************************************//
+//---------Touchsensor------------//
+
+                      // ha megnyomjuk a touchszenzort akkor 1-be áll, nekünk kell lenullázni
+int falelol=0;
+int gomb=0;
+task nyomogomberzekelo(){
+
+     //until(gombmukodes==1);            //addig vár amíg ki nem adjuk a gombmukodes=1 parancsot
+     while(1) {
+         gomb=Sensor(nyomogomb);
+         falelol=gomb;
+         if (gomb==1) {
+             falelol=1;
+         }
+
+     }
+}
+//--------------------------------//
+//---------Szinszenzor------------//
+
+// az is lehet hogy csak x időnként küld adatot (?)
+int szin;                               //aktuális szín
+task szinerzekelo(){
+    while(1){
+         szin=Sensor(szinszenzor);      //Bazsi: folyamatosan kidobja közösbe az aktuális színértéket
+
+    }
+}
+//--------------------------------//
+//---------Ultraszenzor-----------//
+
+int szem;
+int korrj=0;
+int korrb=0;
+task ultrahangerzekelo(){
+     //until (szemmukodes==1);             // ha színműködes 1 akkor megy a task
+     //while(szemmukodes==1){
+       while(1){
+       szem=SensorUS(ultrahang);  //Peti: folyamatosan kidobja közösbe az ultrahang értékét
+
+         
+        if(szem<10){
+           korrb=15;
+           korrj=-15;
+           }
+           else if(szem>=10 && szem<13){
+           korrb=10;
+           korrj=-10;
+           }
+           else if(szem>=13 && szem<15){
+           korrb=5;
+           korrj=-5;
+           }
+           else if(szem>=15 && szem<18){
+           korrb=0;
+           korrj=0;
+           }
+           else if(szem>=18 && szem<20){
+           korrb=-5;
+           korrj=5;
+           }
+           else if(szem>=20 && szem<25){
+           korrb=-5;
+           korrj=5;
+           }
+           else if(szem > 25){
+           korrb=-10;
+           korrj=10;
+           }
+     }
+}
+//--------------------------------//
+//*****************************************************//
+
+        //--------LABIRINTUS-------------//
+        
+//*****************************************************//
+//---------lab-------------------//
+
+int ultrakrit=30;
+int sebtolat=50;
+int fordulasido=700;
+int seb1=60;                                 // előre a mototrok sebessége
+int seb2=60;                                 // a forgas sebessege
+int v=2;
+int megvan=0;                        //ha  avanevonal szint talál jelez a lab-nak
+                                     //kiegészítő sebesség
+
+int varas=1000;
+
+task lab(){
+   while(1){
+   while(feladat!=4 && feladat!=0){}
+   if (feladat==4) hanyat_fordult=0;                       //Peti: addig él ez a task, ameddig a
+   while(feladat==0 || feladat==4){                        //Bazsi: ha a feladat 0 ban vagy 4 ben vagyunk akkor fut ezért le lehet állítani
+     while(szem<=ultrakrit && megvan==0 && falelol==0 && (feladat==0 || feladat==4)){//ha nincs balrakanyar vagy gombnyomás, megyünk előre
+           OnFwd(motorjobb,seb1);
+           OnFwd(motorbal,seb1);
+     }
+     if (megvan==1 && feladat==0){
+           Off(motor);
+           while(gomb==0){}
+     }
+     if (falelol==1){//fal elől.
+        OnRev(motorjobb,sebtolat+v);
+        OnRev(motorbal,sebtolat);            //Peti: visszatolatunk picit.
+        Wait(1000);                           //TESZTELNI KELL!!!!!!!!!!!
+        Off(motor);
+        if(szem<=ultrakrit){                 //fal balra
+           OnFwd(motorbal,seb1);
+           OnRev(motorjobb,seb1);
+           Wait(fordulasido);                //FORDULASIDOT LE KELL MÉRNI!! 90 FOKOT KELLENE FORDULNI ENNYI IDŐ ALATT
+           Off(motor);
+           OnFwd(motorjobb,seb1);
+           OnFwd(motorbal,seb1);
+           Wait(varas);
+           Off(motor);
+           falelol=0;
+           hanyat_fordult=hanyat_fordult+1;       //ha valamerre fordulunk, növeljük a változót
+        }
+        else  if (szem>ultrakrit){           //balra lyuk, elől fal.
+                 OnFwd(motorjobb,seb1);
+                 OnFwd(motorbal,seb1);
+                 Wait(varas);
+                 Off(motor);
+                 OnFwd(motorjobb,seb1);
+                 OnRev(motorbal,seb1);
+                 Wait(fordulasido);
+                 Off(motor);
+                     OnFwdSync(motor,seb1,0);
+                     Wait(varas);
+                     Off(motor);
+                 while(szem>ultrakrit) {
+                     OnFwd(motorjobb,seb1+v);
+                     OnFwd(motorbal,seb1);
+                 }
+                 hanyat_fordult=hanyat_fordult+1;
+        }
+     }
+     else if (szem>ultrakrit && falelol==0){ //balra lyuk, elől nincs fal.
+              if (feladat==4 && hanyat_fordult==4){    // ha már 4-et fordultunk, akkor
+                    OnFwd(motorjobb,seb1);
+                    OnFwd(motorbal,seb1);
+                    Wait(varas);
+                      Off(motor);
+                     OnFwd(motorbal,seb1);             // ha a 4. feladat vagyunk akkor jobbra kell fordulni, és vonalig menni
+                     OnRev(motorjobb,seb1);
+                     Wait(fordulasido);
+                     Off(motor);
+                     OnFwdSync(motor,seb1,0);
+                     Wait(varas);
+                     Off(motor);
+                     while(megvan==0){                // a vanevonal fogja 5 re állítani a feladatot amint megtaláltuk a vonalat
+                          OnFwd(motorbal,seb1);       // a megvan addig nulla amig nincs meg a szin
+                          OnRev(motorjobb,seb1);
+                     }
+                     Off(motor);
+                     while(gomb==0){}                  // ha megvan a szín akkor leállítjuk a mototrokat és várunk gombnyomásig
+              }
+              else  {
+                     OnFwd(motorjobb,seb1);
+                     OnFwd(motorbal,seb1);
+                     Wait(varas);
+                     Off(motor);
+                     OnRev(motorbal,seb1);             // ha a 4. feladat vagyunk akkor jobbra kell fordulni, és vonalig menni
+                     OnFwd(motorjobb,seb1);
+                     Wait(fordulasido);
+                     Off(motor);
+                     OnFwdSync(motor,seb1,0);
+                     Wait(varas);
+                     Off(motor);
+                    hanyat_fordult=hanyat_fordult+1;
+                    while(szem>ultrakrit) {
+                        OnFwd(motorjobb,seb1+v);
+                        OnFwd(motorbal,seb1);
+                    }
+             }
+     }
+   }
+   }
+}
+//--------------------------------//
+//----------vanevonal-------------//
+
+
+
+task vanevonal(){
+   while(1){
+     while(feladat!=0 && feladat!=4){}
+     while(feladat==0 || feladat==4) {
+         if (feladat==0){                //ha  a labirintusban vagyunk
+             if(szin==szin_amit_kovet){
+                 Wait(perges);    // hátha nem jó az érték
+                 if(szin==szin_amit_kovet){
+                      megvan=1;                   // ha megtaláltuk a szint akkor kiadjuk ezt a parancsot a labirintusnak
+                      while(gomb==0){}            // várunk gombnyomásra
+                      feladat=feladat+1;          //gombnyomas utan atlepunk a kovetkezo feladatra
+                      megvan=0;
+
+                 }
+             }
+         
+         }
+         if (feladat==4){                              // ha a falkerülésben vagyunk
+              if(szin==szin_amit_kovet){  // <<<<--------------ha itt más színt kell megtalálni akkor állítsuk be
+                  Wait(perges);    // hátha nem jó az érték
+                  if(szin==szin_amit_kovet){
+                      megvan=1;
+                      while(gomb==0){}                                          // ha találtunk egy színt a kettőből, akkor ezt fogjuk követni
+                      feladat=feladat+1;
+                      megvan=0;
+
+                  }           //PETI: Ha szalagra érünk, akkor kiértünk a labirintusból.
+              }
+         }
+      }
+   }
+}
+//--------------------------------//
+//***************************************************//
+
+           //-----RATALAL A VONALRA----------//
+
+//***************************************************//
+//-----vonal_talal----------------//
+// menjen a robot cikkcakkban föl le és ugy keresse a vonalat
+
+//EZT ÍRD MEG EZEN VAN MIT CSISZOLNI VAGY ÍRJATOK MÁSIKAT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*******************************************************************************************************
+task vonal_talal(){
+    int mennyit;     //hanyszor leptunk be a szinellenőrzésbe (tolatásnál fontos, hogy ha nem találunk színt ne menjünk el a végtelenségig)
+    int irany=1;
+    
+   while(1){
+    while( feladat!=1 && feladat!=5) {}
+    while(feladat==1 || feladat==5){
+        mennyit=0;
+        while(szin==szin_amit_kovet){      //amig az aktualis szinen vagyunk megyünk előre ferdén
+            mennyit=mennyit+1;
+            if (irany==1){
+                  OnFwd(motorjobb, seb1+v);
+                  OnFwd(motorbal, seb1+10);
+            } else if (irany==-1){
+                  OnFwd(motorjobb, seb1+v+10);
+                  OnFwd(motorbal, seb1);
+            }
+        }
+        if (szin==szin_amit_kovetk){   //megnézzük miért léptünk ki
+             Wait(perges);
+             if (szin==szin_amit_kovetk){
+               Off(motor);                                      //ez lesz a kovetendo szinunk
+               while(gomb==0){}
+               feladat=feladat+1;
+             }
+        }
+        else {                                               //ha nem találtunk ilyen színt, akkor visszatolatunk nagyjából merőlegesre és kezdjük előről
+            while (szin!=szin_amit_kovet && mennyit>=-100){   // ugy kell beállítani a -100 at, hogy a robot annyit menjen hátra, ha nem talál vonalat,
+                                                            // mennyit>=-100 azért kell mert ez nézi hogy túltolattunk-e az előző pozíción
+                 mennyit=mennyit-1;                         // hogy visszataláljon a korrigálással a vonalra
+                 if (irany==1){
+                    OnRev(motorjobb, seb1+v);
+                    OnRev(motorbal, seb1+15);   // itt a 15 öt ugy kellene belőni hogy visszafelé nagyjából merőlegesen álljon be a robot
+                 }
+                 else if(irany==-1){
+                    OnRev(motorjobb, seb1+v+15);
+                    OnRev(motorbal, seb1);
+                 }
+                 Wait(10);
+            }
+            if(mennyit<-100){      //itt is át kell állítani
+                 if (irany==1){
+                    while(szin!=szin_amit_kovet){
+                       OnFwd(motorjobb, seb1+v+10);
+                       OnFwd(motorbal, seb1);   // itt a 15 öt ugy kellene belőni hogy visszafelé nagyjából merőlegesen álljon be a robot
+                    }
+                 }
+                 else if(irany==-1){
+                    while(szin!=szin_amit_kovet){
+                        OnFwd(motorjobb, seb1+v);
+                        OnFwd(motorbal, seb1+10);
+                    }
+                 }
+                 Wait(10);
+            }
+            irany=irany*(-1);  // remélem ez itt jó helyen van
+        }
+    }
+
+   }
+
+}
+
+
+
+
+//-----------------------------//
+
+//*********************************************************//
+
+             //---------MERES-----------------//
+             
+//*********************************************************//
+//--------ut lemerese------------//
+int mer=0;
+int ad=0;
+int kesz=0;
+task meres(){
+     int terulet=0;
+     int ut1=0; // összesen mért út adott színből
+     int ut2=0;
+     int szog;
+     int kerek_R=22;
+     while (1) {
+     while(feladat!=2){}
+     while (feladat==2){
+           until(vonalon==1);                  //Bazsi: vár amig nem jön vonalon=1  // de lehet hogy ez akadályozza hogy hozzáadja az utolsó adag mérést
+           ResetRotationCount(motorjobb);
+           szog=0;                           //Bazsi: törli a kerékelfordulást
+           while(vonalon==1 && ad==0){}                        //Bazsi: mérünk, ha lemegyünk a vonalról vagy ad==1 teljesül azaz színt váltottunk lsd. task egyenes1
+           if (hanyszor_valtott_szint==0 ^ ad==1){             //ha az egyik vagy a másik teljesül akkor adja hozzá sztem kizáró vagy kell
+               szog=MotorRotationCount(motorjobb);
+               //NumOut(0,LCD_LINE5,szog,false);
+               ut1=ut1+(szog/360)*2*PI*kerek_R;    //ha mer!=1 hozzáadja az úthoz a reset utáni elfordulást
+               kesz=1;
+               ad=0;
+           } else if (hanyszor_valtott_szint==1 ^ ad==1){   //ha színt váltott akkor a másikhoz adja hozzá kizáró vagy kell azért mert sima vagynál mindig az előhö adná hozzá mert ad==1 teljesül
+               szog=MotorRotationCount(motorjobb);          // vizsont ha hanyszor valtott ==2 akkor még ide kell hozzáadni
+               //NumOut(0,LCD_LINE7,2,false);
+               ut2=ut2+(szog/360)*2*PI*kerek_R;
+               kesz=1;
+               ad=0;
+           }
+           if (hanyszor_valtott_szint==2 ){       // a kétszer váltott színt akkor meg kell állni, vége a mérésnek
+                    Off(motor);
+                    terulet=(ut1*ut2)/2;
+                    NumOut(0,LCD_LINE7,terulet,false);     //megállunk,kiírjuk a területet
+                    while(gomb==0){}                 // várunk a touch szenzorra, gombnyomasra megyünk a következő feladatra
+                    feladat=feladat+1;
+           }
+     }
+   }
+}
+
+
+//------------------------------//
+//**********************************************//
+
+         //-------VONALKOVETES--------//
+         
+//**********************************************//
+//-------vonalkovet-------------//
+task vonal_keres1(){
+     int kanyar=1;
+     int ford;       //Bazsi: maximális elfordulás egy irányba
+     int elford;     //Bazsi: aktuális elfordulás
+     while(1){
+          while(feladat!=2 && feladat!=3  && feladat!=6){}
+          //if (feladat==3) {
+          //    while (gomb==0){}
+          //} ezek nem kellenek sztem
+          while(vonalon==0 && (feladat==2 || feladat==3  || feladat==6)){}  //Bazsi: vár amig a vonalon vagyunk
+          Off(motor);
+          ford=0;
+          elford=0;
+          while (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){
+               ford+=100;
+               if (kanyar==1){
+                  OnFwdSync(motor,seb2,-100);
+               }
+               else if(kanyar==-1){
+                  OnFwdSync(motor,seb2,100);
+               }
+               Wait(elford);
+               while ((szin!=szin_amit_kovet && szin!=szin_amit_kovetk) && elford!=ford) {
+                  Wait(5);
+                  elford+=5;
+               }
+               if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk) kanyar*=-1;
+          }
+          //if (gomb==1 && feladat==3) {
+          //     OnRev(motorjobb,sebtolat+v);
+          //     OnRev(motorbal,sebtolat);            //Peti: visszatolatunk picit.
+          //     Wait(300);
+          //     OnFwd(motorbal,seb1);             // ha a 4. feladat vagyunk akkor jobbra kell fordulni, és vonalig menni
+          //     OnRev(motorjobb,seb1);
+          //     Wait(fordulasido);
+          //     Off(motor); feladat=feladat+1;        //ezt az egyenes1 task kezeli
+          //}
+          
+          Wait(perges);
+          if (szin==szin_amit_kovet || szin==szin_amit_kovetk){
+             vonalon=1;
+             Off(motor);
+          }
+     }
+}
+
+task egyenes1(){
+     vonalon=1;  //Bazsi: tfh a vonalon kezdünk
+     int db=0;
+     while(1){
+         while(feladat!=2 && feladat!=3  && feladat!=6){}
+         while(vonalon==1 && (feladat==2 || feladat==3  || feladat==6)){
+         if (feladat==2) mer=1;
+         if (szin==szin_amit_kovet || szin==szin_amit_kovetk){
+
+            OnFwd(motorjobb,seb1);
+            OnFwd(motorbal,seb1);
+            if (feladat==2){
+               if (szin==szin_amit_kovetk && hanyszor_valtott_szint==0){    //ha még egyszer sem váltottunk színt akkor h_v_sz=0
+                    hanyszor_valtott_szint=0;
+               }
+               else if (szin==szin_amit_kovet && hanyszor_valtott_szint==0) {                            // ha szint váltunk akkor a második szakaszt mérjük
+                       hanyszor_valtott_szint=1;                            // h_v_sz=1 de még az eddig mérteket az előző szakaszhoz kell hozzáadni
+                       ad=1;                                                //kiadjuk az ad parancsot így a mérés elindul
+                       until(kesz==1);
+                       kesz=0;
+                       OnFwd(motorjobb,seb1);
+                       OnFwd(motorbal,seb1);
+                       Wait(200);                     //nincs benne a mérésnél a derékszögű fordulás de eliveleg minden gond nélkül ide
+                       OnFwd(motorbal,seb1);
+                       OnRev(motorjobb,seb1);
+                       Wait(fordulasido);
+                       Off(motor);                              // illeszthető
+               }
+               else if (szin==szin_amit_kovetk ){        //
+                       hanyszor_valtott_szint=2;
+                       ad=1;
+                       until(kesz==1);
+                       kesz=0;
+                       while(gomb==0){}
+
+               }
+            }
+            
+            if (feladat==3){
+                //elvileg erre nincs szükség mert ha egyenesen megyünk akkor egyszerűen átmegyünk rajta//
+            
+            }
+         }
+         if (gomb==1 && feladat==3){                // ha a 3-as feladatban vagyunk akkor  ha gombnyomas van akkor jobbra fordulunk
+               OnRev(motorjobb,sebtolat+v);
+               OnRev(motorbal,sebtolat);
+               Wait(1000);
+               Off(motor);
+               OnFwd(motorbal,seb1);
+               OnRev(motorjobb,seb1);
+               Wait(fordulasido);
+               Off(motor);
+               until(gomb==1);
+               feladat=feladat+1;
+
+         }
+         if (gomb==1 && feladat==6){             // ha a hatos feladatban vagyunk akkor gombnyomas hatasara megallunk
+               OnRev(motorjobb,sebtolat+v);
+               OnRev(motorbal,sebtolat);
+               Wait(400);
+               Off(motor);
+               until(gomb==1);
+               feladat=feladat+1;
+         }
+         else if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){    //Bazsi: ha nem talalja a szint , es nem pereg,
+                 Wait(perges);                                        //Bazsi: atadja az iranyitast a vonal keresonek
+                 if (szin!=szin_amit_kovet && szin!=szin_amit_kovetk){
+                      vonalon=0;
+                      if (feladat==2) mer=0;
+                 }
+              }
+     }
+   }
+}
+
+ //--------------------------------------------//
+ 
+ task vege(){           // üres task ha az összes feladattal végeztünk, ezt fogjuk végrehajtogatni
+     while(feladat!=7){}
+     while(feladat==7){
+        ClearScreen();
+     }
+ }
+ task kiiras(){             // az LCD-t vezérli
+     until(feladat==7);
+     while(feladat!=7){
+         ClearLine(LCD_LINE1);
+         ClearLine(LCD_LINE2);
+         ClearLine(LCD_LINE3);
+         ClearLine(LCD_LINE4);
+         ClearLine(LCD_LINE5);
+         ClearLine(LCD_LINE6);
+         NumOut(0,LCD_LINE1,szem,false);
+         NumOut(0,LCD_LINE2,gomb,false);
+         NumOut(0,LCD_LINE3,szin,false);
+         NumOut(0,LCD_LINE4,feladat,false);
+         NumOut(0,LCD_LINE5,hanyszor_valtott_szint,false);
+         NumOut(0,LCD_LINE6,hanyat_fordult,false);
+    }
+ }
+
+ //------------------------------//
+task vonal_talal2(){
+    int mennyit;     //hanyszor leptunk be a szinellenőrzésbe (tolatásnál fontos, hogy ha nem találunk színt ne menjünk el a végtelenségig)
+    int irany=1;
+    int elso=0;
+   while(1){
+    while( feladat!=1 && feladat!=5) {}
+    while(feladat==1 || feladat==5){
+        mennyit=0;
+        if (irany==1){
+                  OnFwdSync(motor,seb1,100);
+
+        } else if (irany==-1){
+                  OnFwdSync(motor,seb1,-100);
+        }
+        if (elso==0) {
+             Wait(50);
+             elso=elso+1;
+        } else Wait(100);
+        
+        while(szin==szin_amit_kovet){      //amig az aktualis szinen vagyunk megyünk előre ferdén
+            mennyit=mennyit+5;
+            OnFwdSync(motor,seb1,0);
+            Wait(5);
+        }
+        if (szin==szin_amit_kovetk){   //megnézzük miért léptünk ki
+            // Wait(perges);
+            // if (szin==szin_amit_kovetk){
+               Off(motor);                                      //ez lesz a kovetendo szinunk
+               while(gomb==0){}
+               feladat=feladat+1;
+            // }
+        }
+        else {
+            Wait(100);       // itt valtozott
+            Off(motor);      // itt valtozott
+                                        //ha nem találtunk ilyen színt, akkor visszatolatunk nagyjából merőlegesre és kezdjük előről
+            if (irany==1){
+                  OnRevSync(motor,seb1,100);
+            } else if (irany==-1){
+                  OnRevSync(motor,seb1,-100);
+            }
+            Wait(100);
+            while (szin!=szin_amit_kovet && mennyit>=-100){   // ugy kell beállítani a -100 at, hogy a robot annyit menjen hátra, ha nem talál vonalat,
+                                                         // mennyit>=-100 azért kell mert ez nézi hogy túltolattunk-e az előző pozíción
+                 mennyit=mennyit-5;                         // hogy visszataláljon a korrigálással a vonalra
+                 Wait(5);
+                 OnRevSync(motor,seb1,0);
+            }
+            Off(motor);
+            if(mennyit<-100){      //itt is át kell állítani
+                 if (irany==1){
+                    OnFwdSync(motor,seb1,100);
+                    Wait(20);
+                    while(szin!=szin_amit_kovet){
+                      OnFwdSync(motor,seb1,0);
+                    }
+                    irany=irany*(-1);  // remélem ez itt jó helyen van
+                 }
+                 else if(irany==-1){
+                    OnFwdSync(motor,seb1,-100);
+                    Wait(20);
+                    while(szin!=szin_amit_kovet){
+                      OnFwdSync(motor,seb1,0);
+                    }
+                    irany=irany*(-1);  // remélem ez itt jó helyen van
+                 }
+            }
+            Off(motor);
+
+        }
+    }
+
+   }
+
+}
+
+
+
+//********************************************//
+
+         //---ÉS ITT JON A MAIN----//
+
+//********************************************//
+
+task main(){
+      SetSensorTouch(nyomogomb);
+      SetSensorColorFull(szinszenzor);
+      SetSensorUltrasonic(ultrahang);
+
+     Precedes(kiiras,lab,vanevonal,vonal_talal,meres,egyenes1,vonal_keres1,vege,nyomogomberzekelo,szinerzekelo,ultrahangerzekelo);
+      
+}
+
+
+//0.feladatban mi fut: lab,vanevonal
+//1.feladat:           vonalratalal
+//2.feladat:           meres,vonal_keres1,egyenes1
+//3.feladat:           vonal_keres1,egyenes1
+//4.feladat:           lab,vanevonal
+//5.feladat:           vonalratalal
+//6.feladat:           vonal_keres1,egyenes1
+//7.feladat:           kesz
